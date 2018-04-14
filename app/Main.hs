@@ -73,9 +73,9 @@ main =
       image = step (coords,A.fromList Z [0])
       producer = forM_ [0,0.3..] yield
       pipe = forever $ await >>= (\i -> yield $ step (coords, A.fromList Z [i]))
-      consumer = --openGLConsumer dim
-        pngWriter 5 "/home/cdurham/Desktop/bifurcation-simple/i"
-    runSafeT $ runEffect $ producer >-> Pipes.take 1800 >-> pipe >-> printer >-> forever (await >>= yield . arrayToImage) >-> consumer
+      --glConsumer = openGLConsumer dim
+      consumer = pngWriter 5 "/home/cdurham/Desktop/bifurcation-simple-2/i"
+    runSafeT $ runEffect $ producer >-> pipe >-> printer >-> forever (await >>= yield . arrayToImage) >-> consumer
 
 func :: forall a. A.Floating a => Exp a -> Exp (V2 a) -> Exp (V2 a)
 func t v' =
