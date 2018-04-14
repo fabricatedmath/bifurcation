@@ -23,7 +23,8 @@ import Linear
 import Pipes hiding (lift)
 import qualified Pipes.Prelude as Pipes
 import Pipes.Safe
-import Pipes.Graphics.Accelerate (openGLConsumer)
+import Pipes.Graphics
+import Pipes.Graphics.Accelerate
 import Prelude as P
 
 import System.Environment (getArgs)
@@ -70,18 +71,19 @@ main =
       coords = fromFunction dim (generator . dim2ToV3 0)
       step = run1 (colorize . applyFunc)
       image = step (coords,A.fromList Z [0])
-      producer = forM_ [0..] yield
+      producer = forM_ [0,0.3..] yield
       pipe = forever $ await >>= (\i -> yield $ step (coords, A.fromList Z [i]))
-      consumer = openGLConsumer dim
-    runSafeT $ runEffect $ producer >-> Pipes.take 100000 >-> pipe >-> printer >-> consumer
+      consumer = --openGLConsumer dim
+        pngWriter 5 "/home/cdurham/Desktop/bifurcation-simple/i"
+    runSafeT $ runEffect $ producer >-> Pipes.take 1800 >-> pipe >-> printer >-> forever (await >>= yield . arrayToImage) >-> consumer
 
 func :: forall a. A.Floating a => Exp a -> Exp (V2 a) -> Exp (V2 a)
 func t v' =
   let
     (V2 y x) = unlift v' :: V2 (Exp a)
-    f = sin(2*sin(0.02*t)*y - 3*cos(0.03*t)*x)*exp(-abs (sin(0.11*t)*sin (3*x+1-2*y) - cos(x-3*y+1)))
+    f = sin(2*sin(0.02*t)*y - 3*cos(0.03*t)*x)*exp(-abs (sin(0.11*t)*sin (3*x+1-2*y) - sin(0.19*t)*cos(x-3*y+1)))
     --y :: Exp a
-    g = cos(2*sin(0.07*t)*y - 3*cos(0.05*t)*x)*exp(-abs (cos(0.13*t)*cos (3*x+1-2*y) - cos(x-3*y+1)))      --2*sin(0.05*t) + 1.9 - sin (x) :: Exp a
+    g = cos(2*sin(0.07*t)*y - 3*cos(0.05*t)*x)*exp(-abs (cos(0.13*t)*cos (3*x+1-2*y) - cos(0.17*t)*cos(x-3*y+1)))      --2*sin(0.05*t) + 1.9 - sin (x) :: Exp a
   in
     lift $ V2 g f :: Exp (V2 a)
 

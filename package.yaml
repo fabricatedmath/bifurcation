@@ -29,6 +29,7 @@ dependencies:
 - colour-accelerate
 - accelerate-llvm
 - accelerate-llvm-ptx
+- pipes-graphics-repa
 - pipes-graphics-accelerate
 - pipes
 - pipes-safe
