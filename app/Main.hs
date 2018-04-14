@@ -1,8 +1,11 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Main where
 
 import Lib
 
-import Control.Monad (forever)
+import Control.Monad (forever, forM_)
 
 import Data.Array.Accelerate as A hiding ((>->))
 import Data.Array.Accelerate.Data.Colour.RGB
@@ -18,8 +21,10 @@ import Control.Lens
 import Linear
 
 import Pipes hiding (lift)
+import qualified Pipes.Prelude as Pipes
 import Pipes.Safe
 import Pipes.Graphics.Accelerate (openGLConsumer)
+import Prelude as P
 
 import System.Environment (getArgs)
 
@@ -38,6 +43,15 @@ dim2ToV3 i (Z :. y :. x) = V3 y x i
 v3ToDim2 :: V3 Int -> DIM2
 v3ToDim2 (V3 y x i) = (Z :. y :. x)
 
+printer :: MonadIO m => Pipe a a m ()
+printer =
+  forM_ [(1::Int)..]
+  (\i ->
+      do
+        await >>= yield
+        if i `mod` 100 P.== 0 then liftIO $ print i else return ()
+  )
+
 main :: IO ()
 main =
   do
@@ -54,11 +68,32 @@ main =
     print $ generator (V3 1 1 1)
     let
       coords = fromFunction dim (generator . dim2ToV3 0)
-      image = run1 colorize coords
-      producer = forever $ yield image
-      printer = forever $ await >>= yield >> liftIO (print "yielded")
+      step = run1 (colorize . applyFunc)
+      image = step (coords,A.fromList Z [0])
+      producer = forM_ [0..] yield
+      pipe = forever $ await >>= (\i -> yield $ step (coords, A.fromList Z [i]))
       consumer = openGLConsumer dim
-    runSafeT $ runEffect $ producer >-> printer >-> consumer
+    runSafeT $ runEffect $ producer >-> Pipes.take 100000 >-> pipe >-> printer >-> consumer
+
+func :: forall a. A.Floating a => Exp a -> Exp (V2 a) -> Exp (V2 a)
+func t v' =
+  let
+    (V2 y x) = unlift v' :: V2 (Exp a)
+    f = sin(2*sin(0.02*t)*y - 3*cos(0.03*t)*x)*exp(-abs (sin(0.11*t)*sin (3*x+1-2*y) - cos(x-3*y+1)))
+    --y :: Exp a
+    g = cos(2*sin(0.07*t)*y - 3*cos(0.05*t)*x)*exp(-abs (cos(0.13*t)*cos (3*x+1-2*y) - cos(x-3*y+1)))      --2*sin(0.05*t) + 1.9 - sin (x) :: Exp a
+  in
+    lift $ V2 g f :: Exp (V2 a)
+
+applyFunc
+  :: forall sh a. (Shape sh, A.Floating a)
+  => Acc (Array sh (V2 a), Array DIM0 a)
+  -> Acc (Array sh (V2 a))
+applyFunc a =
+  let
+    (arr,t) = unlift a :: (Acc (Array sh (V2 a)), Acc (Array DIM0 a))
+  in
+    A.map (func (the t)) arr
 
 colorize :: Acc (Array DIM2 (V2 Float)) -> Acc (Array DIM2 (V3 Word8))
 colorize arr =
