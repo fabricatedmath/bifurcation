@@ -37,6 +37,8 @@ resolver: lts-11.4
 # will not be run. This is useful for tweaking upstream packages.
 packages:
 - .
+- ../pipes-graphics/pipes-graphics-accelerate
+- ../pipes-graphics/pipes-graphics-repa
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:
@@ -56,11 +58,11 @@ extra-deps:
 - git: https://github.com/fabricatedmath/linear-instances
   commit: f87581dbbc00325ee1914558000b0d529b48a311
 
-- git: https://github.com/fabricatedmath/pipes-graphics
-  commit: 57c5c6b51eaae3a16831f795d74cf423fb0e1e86
-  subdirs:
-    - pipes-graphics-repa
-    - pipes-graphics-accelerate
+#- git: https://github.com/fabricatedmath/pipes-graphics
+#  commit: 57c5c6b51eaae3a16831f795d74cf423fb0e1e86
+#  subdirs:
+#    - pipes-graphics-repa
+#    - pipes-graphics-accelerate
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

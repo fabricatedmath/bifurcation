@@ -69,13 +69,15 @@ main =
     print $ generator (V3 1 1 1)
     let
       coords = fromFunction dim (generator . dim2ToV3 0)
-      step = run1 (colorize . applyFunc)
-      image = step (coords,A.fromList Z [0])
+      step = run1 (arrayToFlat . colorize . applyFunc coords)
       producer = forM_ [0,0.3..] yield
-      pipe = forever $ await >>= (\i -> yield $ step (coords, A.fromList Z [i]))
+      pipe = forever $ await >>= (\i -> yield $ step (A.fromList Z [i]))
+      --consumer = forever (await >>= yield . flatToImage dim) >-> pngWriter 5 "/run/shm/bifurcation/i"
+      glConsumer = openGLConsumerFlat dim
       --glConsumer = openGLConsumer dim
-      consumer = pngWriter 5 "/home/cdurham/Desktop/bifurcation-simple-2/i"
-    runSafeT $ runEffect $ producer >-> pipe >-> printer >-> forever (await >>= yield . arrayToImage) >-> consumer
+      --consumer = pngWriter 5 "/home/cdurham/Desktop/bifurcation-simple-3/i"
+    runSafeT $ runEffect $ producer >-> Pipes.take 10000 >-> pipe >-> printer >-> glConsumer
+      --forever (await >>= liftIO . print) --forever (await >>= yield . arrayToImage) >-> consumer
 
 func :: forall a. A.Floating a => Exp a -> Exp (V2 a) -> Exp (V2 a)
 func t v' =
@@ -89,11 +91,12 @@ func t v' =
 
 applyFunc
   :: forall sh a. (Shape sh, A.Floating a)
-  => Acc (Array sh (V2 a), Array DIM0 a)
+  => Array sh (V2 a)
+  -> Acc (Array DIM0 a)
   -> Acc (Array sh (V2 a))
-applyFunc a =
+applyFunc a t =
   let
-    (arr,t) = unlift a :: (Acc (Array sh (V2 a)), Acc (Array DIM0 a))
+    arr = A.use a
   in
     A.map (func (the t)) arr
 
