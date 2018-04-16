@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -17,6 +18,9 @@ import Field
 import Field.Hint
 import Field.Hint.Config
 
+import Fluid
+import Type
+
 import Control.Lens
 import Linear
 
@@ -26,6 +30,8 @@ import Pipes.Safe
 import Pipes.Graphics
 import Pipes.Graphics.Accelerate
 import Prelude as P
+
+import Acc.Lib
 
 import System.Environment (getArgs)
 
@@ -65,44 +71,47 @@ main =
         } = hintDescr
       dim = v2ToDim2 $ fd ^. fdRes
       generator = generateCoords fd
+      !idf = makeDensity_rgb dim
     print $ fd ^. fdRes
     print $ generator (V3 1 1 1)
     let
       coords = fromFunction dim (generator . dim2ToV3 0)
+      func = applyFunc coords
       step = run1 (arrayToFlat . colorize . applyFunc coords)
-      producer = forM_ [0,0.3..] yield
-      pipe = forever $ await >>= (\i -> yield $ step (A.fromList Z [i]))
-      --consumer = forever (await >>= yield . flatToImage dim) >-> pngWriter 5 "/run/shm/bifurcation/i"
-      glConsumer = openGLConsumerFlat dim
+      list = [0,0.001..]
+      --list = concatMap (P.take 100 . repeat) list'
+      producer = forM_ list yield
+      --pipe = forever $ await >>= (\i -> yield $ step (A.fromList Z [i]))
+      pipe = fluidPipe idf func
+      consumer = Pipes.seq >-> forever (await >>= yield . flatToImage dim) >-> forever (Pipes.drop 100 >-> Pipes.take 1) >-> pngWriter 5 "/run/shm/bifurcation/i"
+      --glConsumer = openGLConsumerFlat dim
       --glConsumer = openGLConsumer dim
-      --consumer = pngWriter 5 "/home/cdurham/Desktop/bifurcation-simple-3/i"
-    runSafeT $ runEffect $ producer >-> Pipes.take 10000 >-> pipe >-> printer >-> glConsumer
+      --consumer = pngWriter 5 "/run/shm/i"
+    runSafeT $ runEffect $ producer >-> Pipes.take 10000 >-> pipe >-> printer >-> consumer
       --forever (await >>= liftIO . print) --forever (await >>= yield . arrayToImage) >-> consumer
-
-func :: forall a. A.Floating a => Exp a -> Exp (V2 a) -> Exp (V2 a)
-func t v' =
-  let
-    (V2 y x) = unlift v' :: V2 (Exp a)
-    f = sin(2*sin(0.02*t)*y - 3*cos(0.03*t)*x)*exp(-abs (sin(0.11*t)*sin (3*x+1-2*y) - sin(0.19*t)*cos(x-3*y+1)))
-    --y :: Exp a
-    g = cos(2*sin(0.07*t)*y - 3*cos(0.05*t)*x)*exp(-abs (cos(0.13*t)*cos (3*x+1-2*y) - cos(0.17*t)*cos(x-3*y+1)))      --2*sin(0.05*t) + 1.9 - sin (x) :: Exp a
-  in
-    lift $ V2 g f :: Exp (V2 a)
 
 applyFunc
   :: forall sh a. (Shape sh, A.Floating a)
   => Array sh (V2 a)
   -> Acc (Array DIM0 a)
   -> Acc (Array sh (V2 a))
-applyFunc a t =
-  let
-    arr = A.use a
-  in
-    A.map (func (the t)) arr
+applyFunc coords t =
+  A.map (func (the t)) $ A.use coords
+  where
+    func :: forall a. A.Floating a => Exp a -> Exp (V2 a) -> Exp (V2 a)
+    func t v' =
+      let
+        (V2 y x) = unlift v' :: V2 (Exp a)
+        f = sin(2*sin(0.02*t)*y - 3*cos(0.03*t)*x)*exp(-abs (sin(0.11*t)*sin (3*x+1-2*y) - sin(0.19*t)*cos(x-3*y+1)))
+        g = cos(2*sin(0.07*t)*y - 3*cos(0.05*t)*x)*exp(-abs (cos(0.13*t)*cos (3*x+1-2*y) - cos(0.17*t)*cos(x-3*y+1)))
+      in
+        lift $ V2 (g/500) (f/500) :: Exp (V2 a)
+
 
 colorize :: Acc (Array DIM2 (V2 Float)) -> Acc (Array DIM2 (V3 Word8))
 colorize arr =
   let
+    maxV :: Exp Float
     maxV = the $ A.maximum $ flatten $ A.map A.norm $ arr
 
     color :: Exp (V2 Float) -> Exp Colour
@@ -127,3 +136,41 @@ rgbToV3 c =
     b = A.round $ b' * 255
   in
     lift (V3 r g b)
+
+vecToTup :: Exp (V2 Float) -> Exp (Float,Float)
+vecToTup v =
+  let
+    (V2 y x) = unlift v :: V2 (Exp Float)
+  in
+    lift (y,x)
+
+singleton :: Float -> Array DIM0 Float
+singleton = A.fromList Z . return
+
+fluidPipe
+  :: Monad m
+  => Array DIM2 (Float, RGB Float)
+  -> (Acc (Array DIM0 Float) -> Acc (Array DIM2 (V2 Float)))
+  -> Pipe Float (Array DIM1 Word8) m ()
+fluidPipe idf func = f (idf,ivf)
+  where
+    !ivf = run1 (A.map vecToTup . func) $ singleton 0
+    step =
+      run1
+      (\d ->
+          let
+            (t,arr) = unlift d
+            e = fluid 100 0.01 0 0 arr
+            (df',vf') = unlift e :: (Acc (Field RGBDensity), Acc VelocityField)
+            cf' = makePicture df'
+            vf'' = A.zipWith (.+.) (A.map vecToTup $ func t) $ decayVelocity 0.9999 vf'
+          in
+            lift (decayDensity 0.9999 df', vf'', arrayToFlat cf')
+      )
+
+    f (df,vf) =
+      do
+        t <- await
+        let (df',vf',cf') = step (singleton t,(df,idf,vf))
+        yield cf'
+        f (df',vf')
