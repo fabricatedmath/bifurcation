@@ -8,7 +8,7 @@ import Lib
 
 import Control.Monad (forever, forM_)
 
-import Data.Array.Accelerate as A hiding ((>->))
+import Data.Array.Accelerate as A hiding ((>->),(^))
 import Data.Array.Accelerate.Data.Colour.RGB
 import qualified Data.Array.Accelerate.Data.Colour.HSL as HSL
 import Data.Array.Accelerate.Linear as A
@@ -78,17 +78,35 @@ main =
       coords = fromFunction dim (generator . dim2ToV3 0)
       func = applyFunc coords
       step = run1 (arrayToFlat . colorize . applyFunc coords)
-      list = [0,0.001..]
-      --list = concatMap (P.take 100 . repeat) list'
+      list' = [0,1..]
+      list = list'
+      --list = concatMap (P.take 10000 . repeat) list'
       producer = forM_ list yield
-      --pipe = forever $ await >>= (\i -> yield $ step (A.fromList Z [i]))
-      pipe = fluidPipe idf func
-      consumer = Pipes.seq >-> forever (await >>= yield . flatToImage dim) >-> forever (Pipes.drop 100 >-> Pipes.take 1) >-> pngWriter 5 "/run/shm/bifurcation/i"
-      --glConsumer = openGLConsumerFlat dim
+      pipe = forever $ await >>= (\i -> yield $ step (A.fromList Z [i]))
+      --pipe = fluidPipe idf func
+      --consumer = Pipes.seq >-> forever (await >>= yield . flatToImage dim) >-> forever (Pipes.drop 100 >-> Pipes.take 1) >-> pngWriter 5 "/run/shm/bifurcation/i"
+      glConsumer = openGLConsumerFlat dim
       --glConsumer = openGLConsumer dim
       --consumer = pngWriter 5 "/run/shm/i"
-    runSafeT $ runEffect $ producer >-> Pipes.take 10000 >-> pipe >-> printer >-> consumer
+    runSafeT $ runEffect $ producer >-> Pipes.take 10000 >-> pipe >-> printer >-> glConsumer
       --forever (await >>= liftIO . print) --forever (await >>= yield . arrayToImage) >-> consumer
+
+-- applyFunc
+--   :: forall sh a. (Shape sh, A.Floating a)
+--   => Array sh (V2 a)
+--   -> Acc (Array DIM0 a)
+--   -> Acc (Array sh (V2 a))
+-- applyFunc coords t =
+--   A.map (func (the t)) $ A.use coords
+--   where
+--     func :: forall a. A.Floating a => Exp a -> Exp (V2 a) -> Exp (V2 a)
+--     func t v' =
+--       let
+--         (V2 y x) = unlift v' :: V2 (Exp a)
+--         f = sin(2*sin(0.02*t)*y - 3*cos(0.03*t)*x)*exp(-abs (sin(0.11*t)*sin (3*x+1-2*y) - sin(0.19*t)*cos(x-3*y+1)))
+--         g = cos(2*sin(0.07*t)*y - 3*cos(0.05*t)*x)*exp(-abs (cos(0.13*t)*cos (3*x+1-2*y) - cos(0.17*t)*cos(x-3*y+1)))
+--       in
+--         lift $ V2 (g/500) (f/500) :: Exp (V2 a)
 
 applyFunc
   :: forall sh a. (Shape sh, A.Floating a)
@@ -102,10 +120,27 @@ applyFunc coords t =
     func t v' =
       let
         (V2 y x) = unlift v' :: V2 (Exp a)
-        f = sin(2*sin(0.02*t)*y - 3*cos(0.03*t)*x)*exp(-abs (sin(0.11*t)*sin (3*x+1-2*y) - sin(0.19*t)*cos(x-3*y+1)))
-        g = cos(2*sin(0.07*t)*y - 3*cos(0.05*t)*x)*exp(-abs (cos(0.13*t)*cos (3*x+1-2*y) - cos(0.17*t)*cos(x-3*y+1)))
+        f = sin(0.02*t)*sin((cos (cos(0.05*t)*5*x))*(1-x)*(x-1)*(0.5-x))
+        g = cos(0.03*t)*cos(20*cos (1-x)*(sin (cos(0.07*t)*5*y))*(1-y))
       in
         lift $ V2 (g/500) (f/500) :: Exp (V2 a)
+
+-- applyFunc
+--   :: forall sh a. (Shape sh, A.Floating a)
+--   => Array sh (V2 a)
+--   -> Acc (Array DIM0 a)
+--   -> Acc (Array sh (V2 a))
+-- applyFunc coords t =
+--   A.map (func (the t)) $ A.use coords
+--   where
+--     func :: forall a. A.Floating a => Exp a -> Exp (V2 a) -> Exp (V2 a)
+--     func t v' =
+--       let
+--         (V2 y x) = unlift v' :: V2 (Exp a)
+--         f = sin(0.11*t)*2*exp(cos (10*x) - sin(0.07*t)*sin(cos(0.02*t)*30*y))*sin(0.5 - 10*x*y)
+--         g = cos(0.13*t)*2*exp(sin (20*x) - cos(0.05*t)*cos(sin(0.03*t)*30*y))*sin(1 + 10*x*y)
+--       in
+--         lift $ V2 (g/500) (f/500) :: Exp (V2 a)
 
 
 colorize :: Acc (Array DIM2 (V2 Float)) -> Acc (Array DIM2 (V3 Word8))
