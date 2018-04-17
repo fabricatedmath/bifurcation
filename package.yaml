@@ -34,20 +34,34 @@ dependencies:
 - pipes-graphics-accelerate
 - pipes
 - pipes-safe
+- template-haskell
+- haskell-src-meta
 
 library:
   source-dirs: src
 
 executables:
-  bifurcation-exe:
+  bifurcation-child-exe:
     main:                Main.hs
-    source-dirs:         app
+    source-dirs:         app/bifurcation-child
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
     - bifurcation
+  bifurcation-exe:
+    main:                Main.hs
+    source-dirs:         app/bifurcation
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - bifurcation
+    - directory
+    - filepath
+    - process
 
 tests:
   bifurcation-test:

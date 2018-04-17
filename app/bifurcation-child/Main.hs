@@ -1,6 +1,8 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 module Main where
 
@@ -22,12 +24,11 @@ import Fluid
 import Type
 
 import Control.Lens
-import Linear
 
 import Pipes hiding (lift)
 import qualified Pipes.Prelude as Pipes
 import Pipes.Safe
-import Pipes.Graphics
+--import Pipes.Graphics
 import Pipes.Graphics.Accelerate
 import Prelude as P
 
@@ -48,7 +49,7 @@ dim2ToV3 :: Int -> DIM2 -> V3 Int
 dim2ToV3 i (Z :. y :. x) = V3 y x i
 
 v3ToDim2 :: V3 Int -> DIM2
-v3ToDim2 (V3 y x i) = (Z :. y :. x)
+v3ToDim2 (V3 y x _i) = (Z :. y :. x)
 
 printer :: MonadIO m => Pipe a a m ()
 printer =
@@ -67,7 +68,7 @@ main =
     let
       HintDescr
         { _hintDescrFD = fd
-        , _hintDescrFS = fs
+        , _hintDescrFS = _fs
         } = hintDescr
       dim = v2ToDim2 $ fd ^. fdRes
       generator = generateCoords fd
@@ -113,15 +114,15 @@ applyFunc
   => Array sh (V2 a)
   -> Acc (Array DIM0 a)
   -> Acc (Array sh (V2 a))
-applyFunc coords t =
-  A.map (func (the t)) $ A.use coords
+applyFunc coords tA =
+  A.map (func (the tA)) $ A.use coords
   where
-    func :: forall a. A.Floating a => Exp a -> Exp (V2 a) -> Exp (V2 a)
+    func :: Exp a -> Exp (V2 a) -> Exp (V2 a)
     func t v' =
       let
         (V2 y x) = unlift v' :: V2 (Exp a)
-        f = sin(0.02*t)*sin((cos (cos(0.05*t)*5*x))*(1-x)*(x-1)*(0.5-x))
-        g = cos(0.03*t)*cos(20*cos (1-x)*(sin (cos(0.07*t)*5*y))*(1-y))
+        f = [hs_f|f.s|]
+        g = [hs_f|g.s|]
       in
         lift $ V2 (g/500) (f/500) :: Exp (V2 a)
 
@@ -152,7 +153,7 @@ colorize arr =
     color :: Exp (V2 Float) -> Exp Colour
     color v =
       let
-        (V2 y x) = unlift v
+        (V2 y _x) = unlift v
         theta' = acos $ constant (V2 0 1) `A.dot` A.normalize v
         theta = cond (y A.< 0) (2*pi - theta') theta'
         h' = 360*theta/(2*pi)
