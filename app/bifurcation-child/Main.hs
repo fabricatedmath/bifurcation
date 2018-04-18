@@ -64,6 +64,7 @@ main :: IO ()
 main =
   do
     args <- getArgs
+    print args
     hintDescr <- loadHintDescrFromArgs "default" args :: IO (HintDescr Float)
     let
       HintDescr
@@ -79,17 +80,18 @@ main =
       coords = fromFunction dim (generator . dim2ToV3 0)
       func = applyFunc coords
       step = run1 (arrayToFlat . colorize . applyFunc coords)
-      list' = [0,1..]
+      list' = [0,0.03..]
       list = list'
       --list = concatMap (P.take 10000 . repeat) list'
       producer = forM_ list yield
       pipe = forever $ await >>= (\i -> yield $ step (A.fromList Z [i]))
       --pipe = fluidPipe idf func
       --consumer = Pipes.seq >-> forever (await >>= yield . flatToImage dim) >-> forever (Pipes.drop 100 >-> Pipes.take 1) >-> pngWriter 5 "/run/shm/bifurcation/i"
+      glConsumer :: Consumer' (Array DIM1 Word8) (SafeT IO) ()
       glConsumer = openGLConsumerFlat dim
       --glConsumer = openGLConsumer dim
       --consumer = pngWriter 5 "/run/shm/i"
-    runSafeT $ runEffect $ producer >-> Pipes.take 10000 >-> pipe >-> printer >-> glConsumer
+    runSafeT $ runEffect $ producer >-> pipe >-> printer >-> glConsumer
       --forever (await >>= liftIO . print) --forever (await >>= yield . arrayToImage) >-> consumer
 
 -- applyFunc
@@ -124,7 +126,8 @@ applyFunc coords tA =
         f = [hs_f|f.s|]
         g = [hs_f|g.s|]
       in
-        lift $ V2 (g/500) (f/500) :: Exp (V2 a)
+        --lift $ V2 (g/200) (f/200) :: Exp (V2 a)
+        lift $ V2 (g) (f) :: Exp (V2 a)
 
 -- applyFunc
 --   :: forall sh a. (Shape sh, A.Floating a)
