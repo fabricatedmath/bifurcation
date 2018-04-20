@@ -84,6 +84,7 @@ main =
       list = list'
       --list = concatMap (P.take 10000 . repeat) list'
       producer = forM_ list yield
+      --producer' = forM_ list yield
       pipe = forever $ await >>= (\i -> yield $ step (A.fromList Z [i]))
       --pipe = fluidPipe idf func
       --consumer = Pipes.seq >-> forever (await >>= yield . flatToImage dim) >-> forever (Pipes.drop 100 >-> Pipes.take 1) >-> pngWriter 5 "/run/shm/bifurcation/i"
@@ -91,6 +92,10 @@ main =
       glConsumer = openGLConsumerFlat dim
       --glConsumer = openGLConsumer dim
       --consumer = pngWriter 5 "/run/shm/i"
+      --step' = fromSingleton . run1 (A.maximum . flatten . A.map A.norm . applyFunc coords)
+      --pipe' = forever $ await >>= (\i -> yield $ step' (A.fromList Z [i]))
+    --print $ P.maximum $ Pipes.toList $ producer' >-> pipe' >-> Pipes.take 10000
+    --runSafeT $ runEffect $ producer >-> pipe' >-> forever (await >>= liftIO . print)
     runSafeT $ runEffect $ producer >-> pipe >-> printer >-> glConsumer
       --forever (await >>= liftIO . print) --forever (await >>= yield . arrayToImage) >-> consumer
 
@@ -110,6 +115,9 @@ main =
 --         g = cos(2*sin(0.07*t)*y - 3*cos(0.05*t)*x)*exp(-abs (cos(0.13*t)*cos (3*x+1-2*y) - cos(0.17*t)*cos(x-3*y+1)))
 --       in
 --         lift $ V2 (g/500) (f/500) :: Exp (V2 a)
+
+fromSingleton :: Array DIM0 a -> a
+fromSingleton = flip indexArray Z
 
 applyFunc
   :: forall sh a. (Shape sh, A.Floating a)
@@ -156,9 +164,8 @@ colorize arr =
     color :: Exp (V2 Float) -> Exp Colour
     color v =
       let
-        (V2 y _x) = unlift v
-        theta' = acos $ constant (V2 0 1) `A.dot` A.normalize v
-        theta = cond (y A.< 0) (2*pi - theta') theta'
+        (V2 y x) = unlift v
+        theta = A.atan2 y x
         h' = 360*theta/(2*pi)
         s' = 0.5
         v' = (*0.6) $ A.norm v / maxV
